@@ -1,6 +1,7 @@
 library(brms)
 library(tidyverse)
-
+library(here)
+library(tidybayes)
 ab_data = read_csv('data/ab_data.csv')
 
 #Set prior.  Prior parameters were determined by
@@ -14,9 +15,17 @@ variant_prior<-set_prior('normal(0,1)', class = 'b', coef = 'variantB')
 model = brm(y|trials(n) ~ variant + (1|member_id), 
             data = ab_data, 
             prior = baseline_prior + variant_prior,
-            family  = binomial(),
-            warmup = 1000,
-            iter = 4000,
-            chains = 8,
-            seed = 19920908,
-            file = 'models/bayesian_ab_test.RDS')
+            family  = binomial())
+
+
+
+a = posterior_linpred(model, 
+                      re_formula =NA, 
+                      newdata = tibble(n=1, variant = 'A'))
+
+b = posterior_linpred(model, 
+                      re_formula =NA, 
+                      newdata = tibble(n=1, variant = 'B'))
+
+mean(plogis(a))
+mean(plogis(b))
