@@ -1,0 +1,277 @@
+---
+title: "AB Testing Using A Bayesian Decision Making Framework"
+author: "Demetri Pananos"
+output:
+  pdf_document:
+    latex_engine: xelatex
+mainfont: Arial
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(brms)
+library(tidybayes)
+library(knitr)
+library(kableExtra)
+
+theme_set(theme_minimal())
+
+
+knitr::opts_chunk$set(
+  echo = F, #Do not print the code
+  message = F, #Do not show error messages
+  warning = F, #Do not show warnings
+  fig.height = 3, #Height of images in inches
+  fig.width = 5, #Width of images in inches
+  fig.align = 'center', #Center the images
+  dpi = 400, #Image quality
+  cache = F #Cache computations from previous renders
+)
+
+#load data
+ab_raw_data <- readxl::read_xlsx('../data/Question 1 - AB Testing Data.xlsx')
+job_data <- readxl::read_xlsx('../data/Question 2 - Job Data.xlsx')
+ab_data<- read_csv('../data/ab_data.csv')
+```
+
+
+# Introduction
+
+This analysis intends to analyze the AB test provided from Voices.com.  A decision must be made to either implement a change to the response page or continue with status quo.  I intend to analyze this AB test by examining the cost of making a wrong decision.  I use a heirarchical Bayesian logistic regression to model the hire rate for both variants, and then Bayesian decision analysis to compute the expected cost a wrong decision using the accompanying job data.  Techincal details are included in an appendix.  Considerations for extentions to the analysis are discussed.
+
+```{r methods}
+num_unique_members<- n_distinct(ab_raw_data$member_id)
+allocation<-mean(ab_raw_data$variant=='B')
+```
+
+# Methods
+
+ The data show that members post multiple jobs during the experiment, violating i.i.d. assumptions required for $z$-test of proportions or similar tests.  To combat this, I use a multilevel Bayesian logistic regression to estimate the population effects of the variant, accounting for the multiple observations of some members.  
+
+The brief indicates that the hire rate for status quo is between 60% and 70%.  Because I have chosen a Bayesian framework, this information can be directly passed to the model to improve precision of downstream estimates.  For more on model details, prior distributions, and model checking, please see the appendix.
+
+The model is capable of producing estimates for hire rate for both variants.  Examining estimates of hire rate in isolation doesn't tell the whole story.  If the new variant's effect on the hire rate is highly uncertain, then there is an appreciable risk that Voices.com could implement a variant to the response page which actually hurts hire rate.  To understand these risks more thoroughly, I use Bayesian decision making to estimate the expected decrease in hire rate when a wrong decision is made.
+
+
+```{r}
+#Used in text
+filled <- sum(ab_data$y)
+total <- sum(ab_data$n)
+
+#Creating table 1
+table_1<-ab_data %>% 
+  group_by(variant) %>% 
+  summarise(Hired= sum(y), Total = sum(n))  %>% 
+  gather(val, var, -variant) %>% 
+  spread(variant, var) %>% 
+  mutate(Together = A + B)
+
+#Load the model for summarization
+model = brm(file='../models/Bayesian_ab_test.RDS')
+
+#Spread the samples from the posterior.
+#Construct the estimated hire rates from the model
+#Put them in a tibble because I'm going to be using them a lot.
+rates = model %>% 
+  spread_draws(b_Intercept, b_variantB) %>% 
+  transmute(rate_a = plogis(b_Intercept), rate_b = plogis(b_Intercept + b_variantB))
+
+#Construct table 2
+table2 = rates %>% 
+  mutate(b_m_a = rate_b - rate_a) %>% 
+  gather(val, var) %>% 
+  group_by(val) %>% 
+  mean_qi %>% 
+  select(val, var, .lower, .upper) %>% 
+  mutate(val = c('B-A','A','B')) %>% 
+  mutate_if(is.numeric, ~scales::percent(.x,1)) %>% 
+  unite(interval, .lower, .upper, sep = ' - ')
+
+
+```
+
+# Results
+
+## Estimated Hire Rates
+
+A total of `r filled` out of `r total` jobs were labeled hired during the experiment. The table below shows total hired jobs stratified by variant.
+
+```{r}
+table_1 %>% 
+  kable(format = 'latex', 
+        booktabs = T,
+        col.names = c('', 'A','B','Together'),
+        caption = 'Summary of hired jobs in experiment.') %>% 
+  kableExtra::kable_styling(latex_options = c('striped',"condensed", 'hold_position'), full_width = F)
+```
+
+
+
+Shown in table 2 are the expected hire rates from the model and accompanying 95% credible intervals ^[Credible intervals are the way a lot of people want to interpret confidence intervals.  They are regions of parameter space where there is 95% probability that the effect lives.  It would be completely correct to say "with 95% probability, the hire rate for version A is between ....".].  The model estimates that variant B has a superior hire rate as compared to variant A, however the expected hire rate is not markedly larger than version A.  The uncertainty in the difference in hire rates covers negative differences, meaning that there is a chance that B leads to lower hire rate than A in practice.
+
+
+```{r}
+table2 %>% 
+  kable(format = 'latex', 
+        booktabs = T,
+        col.names = c('', 'Estimate','Uncertainty'),
+        caption = 'Esimtated hire rates from the model under variants A and B.'
+        ) %>% 
+  kableExtra::kable_styling(latex_options = c('striped',"condensed", 'hold_position'), full_width=F)
+```
+
+## Minimizing Expected Loss
+
+```{r}
+loss = rates %>% 
+  mutate(
+    choose_a = if_else(rate_b > rate_a, rate_b-rate_a, 0),
+    choose_b = if_else(rate_a > rate_b, rate_a-rate_b, 0)
+  ) %>% 
+  summarise_all(mean)
+
+
+choose_b = scales::percent(loss$choose_b,0.01)
+choose_a = scales::percent(loss$choose_a,0.01)
+
+
+table3 = tribble( ~'choice', ~'A Better', ~'B Better',
+         'A Implemented', 0, loss$choose_a,
+         'B Impemented', loss$choose_b, 0) %>% 
+         mutate_if(is.numeric, ~scales::percent(.x, 0.01))
+
+
+```
+
+Implementing a variant which may potentially decrease hire rate is a risk Voices.com should seek to minimize.  Using the model from the previous section, we can estimate the expected amount by which the hire rate would decrease if we implemented the wrong variant. The results of this analysis are shown in table 3.  In summary, if Voices.com kept with variant A but variant B truly was better, Voices.com would expect to lose out on a possible `r choose_a` increase to hire rate.  Compare this to the other scenario, in which implementing variant B when variant A truly was better, Voices.com would experience a decrease in hire rate of `r choose_b`. In summation, if Voices.com wanted to ensure their risk of loss was lowest, implementing variant B is the best option.
+
+
+
+```{r}
+table3 %>% 
+  kable(format = 'latex', 
+        booktabs = T,
+        col.names = c('', 'A Better','B Better'),
+        caption = 'Expected decrease in hire rate under different scenarios.  If the superior variant is implemented, the loss is 0.  If the inferior variant is implemented, loss is non-zero. For example, if A is implemented but B is truly superior, the hire rate would be 3.06\\% lower than what it could have been.  If B is implemented but A is truly superior, hire rate would only be 0.28\\% lower than what it could have been. '
+  ) %>% 
+  kableExtra::kable_styling(latex_options = c('striped',"condensed", 'hold_position'), full_width=F)
+```
+
+
+## "Cash Rules Everything Around Me" - Wu Tang Clan: Loss in Terms of Dollars
+
+```{r}
+avg_bid_rev<-sum(job_data$avgbid)*0.2
+
+
+table4 = tribble( ~'choice', ~'A Better', ~'B Better',
+         'A Implemented', 0, avg_bid_rev*loss$choose_a,
+         'B Impemented', avg_bid_rev*loss$choose_b, 0) %>% 
+         mutate_if(is.numeric, ~scales::dollar(.x))
+
+loss_a = scales::dollar(avg_bid_rev*loss$choose_a)
+loss_b = scales::dollar(avg_bid_rev*loss$choose_b)
+```
+
+Variant B is estimated to result in smallest loss.  This loss can be translated into dollars by using the job dataset.  Of all jobs in that dataset, Voices.com is expected to earn $0.2 \times \mbox{hire rate} \times \mbox{sum of average bid}$ dollars. From the model, I estimate that had Voices.com implemented variant B instead of variant A for all jobs in the job dataset assuming variant A is truly superior, then Voices.com have lost out on `r loss_b` worth of revenue.  Compare this to the loss of `r loss_a` worth of revenue when sticking with variant A assuming variant B is truly better.  This underscores how costly a wrong decision can be.
+
+```{r}
+
+table4 %>% 
+  kable(format = 'latex', 
+        booktabs = T,
+        col.names = c('', 'A Better','B Better'),
+        caption = 'Expected revenue loss under different scenarios.'
+  ) %>% 
+  kableExtra::kable_styling(latex_options = c('striped',"condensed", 'hold_position'), full_width=F)
+```
+
+
+
+
+# Answers to Questions From The Leadership
+```{r}
+prob_increase = scales::percent(mean(rates$rate_b>rates$rate_a))
+
+increase = scales::percent(mean(rates$rate_b-rates$rate_a))
+
+rate_a = scales::percent(mean(rates$rate_a))
+rate_b = scales::percent(mean(rates$rate_b))
+
+
+```
+
+
+1. Will an update to the Voices.com's response page increase hire rate?
+
+From the model, I estimate there is a `r prob_increase` chance that implementing the update will increase hire rate.  The expected change in hire rate would be an increase of `r increase` from `r rate_a` to `r rate_b`.
+
+
+2. Are there any additional findings we can get from our job data?
+
+Not only do we expect variant B to lead to superior hire rate, but implementing variant B over A also decreases expected loss.
+
+I investigated expected revenue loss using the job data.  Had variant B been applied to all jobs in the job data when variant A was truly better, Voices.com would have lost `r loss_b`.  Had variant A been applied to all jobs in the job data when variant B was truly better, Voices.com would have lost `r loss_a`.  The cost from choosing the wrong variant is smallest when variant B is chosen.
+
+3.  What Should We Do?
+
+Assuming Voices.com seeks to minimize losses in addition to increasing hire rate, Voices.com should implement variant B.  However, looping in the business and discussing risk tolerance is an important step in making the decision which I am not able to do presently.
+
+# Conclusions and Considerations
+
+Variant B is estimated to have a superior hire rate as compated to status quo.  Additionally, implementing variant B when variant A is truly superior leads to a smaller loss than implementing variant A when variant B is truly superior.  I used the accompanying job data to demonstrate that implementing variant A could possibly be a $90,000 dollar mistake, where as implementing variant B would potentially be ten times less costly.
+
+
+A more thorough approach would be to model the hired price as a function of the job details (e.g. quote min, quote max, rating, etc) and then estimate expected revenue loss for both variants integrating over all uncertainty. This would ecplicitly model all uncertainty in the decsion process and give the most faithful estimates of loss.  Had I more time, this is the approach I would have taken.
+
+\newpage
+# Appendix
+
+I'm including this appendix for posterity.  I would not expect business stakeholders to read this, but were I to actually work for Voices.com I would inlclude such a section for reproducibility and accountability for and to my fellow analysts.
+
+## Model
+
+Some members are observed several times.  This allows for each members hire rate to be estimated, and then the population level hire rate to be estimated.  The model is then
+
+$$ \log\left( \dfrac{p_i}{1-p_i} \right) = \beta_{0,i} + \beta_1 x $$
+
+Here, $p_i$ is the hire rate for member $i$, $\beta_{0,i}$ is baseline hire rate on the log odds scale for member $i$, and $\beta_1$ is the log-odds ratio for the variant over status quo.  The assumption here is that each member's hire rate is normally distributed on the log odds scale with mean equal to population baseline hire rate and some variance which requires estimation.  Mathematically,
+
+$$\beta_{0,i} \sim \mathcal{N}(\beta_0, \sigma^2)$$
+
+The brief indicates that the baseline hire rate is between 60% and 70%.  I interpret this as a 95% credible region, and thus use a prior for the baseline hire rate in which 95% of the probability mass can be found between 0.6 and 0.7.  On the log odds scale, this corresponds to the following prior
+
+$$ \beta_0 \sim \mathcal{N}(0.61, 0.12)$$
+
+In my own experience, AB tests do not result in changes to baseline rate larger than 10%.  A prior on the effect of the variant should be centered at 0 (i.e. null effect) and should not go too far beyond 2 standard deviations from the mean.  In the absence of any other information on the variant, a standard normal prior should suffice
+
+$$ \beta_1 \sim \mathcal{N}(0,1) $$
+
+## Loss Function
+
+Let $a$ and $b$ be the true underlying hire rates under variants A and B respectively.  The expected loss  would be
+
+$$ E[L](x)=\int_{A} \int_{B} L(a, b, x) f(a, b) da\, db $$
+Here, $f$ is the joint posterior density of the hire rates, and $L$ is the loss function for implementing variant $x$
+
+$$ L(a, b, x)=\left\{\begin{array}{ll}
+\max (b-a, 0) & x=a \\
+\max (a-b, 0) & x=b
+\end{array}\right. $$
+
+Given we implement variant $x$, $L$ tells us how much the hire rate would decrease provided we implemented the worse variant.
+
+## Model Checking
+
+To check my model, I draw from the posterior and determine how many jobs the model predicts to be hired.  If the number of observed hired jobs is similar to the number of predicted hired jobs, this is an indication the model fits well.
+
+Show below is a histogram of predicted hired jobs.  We see that the observed hired jobs (red line) is very close to the mean of the posterior distribution of predicted hired jobs. Thus, we conclude our model fits appropirately.  That the mean is lower than the observed is an expected feature since the multilevel nature of the model will pool estimates towards the population level hire rate.
+```{r}
+observed = sum(ab_data$y)
+X = posterior_predict(model, nsamples = 2000)
+pred = apply(X,1,sum)
+
+hist(pred, main = 'Posterior Predictive Check of Jobs Hired', xlab = 'Hired Jobs', breaks = seq(1250, 1500, 10))
+abline(v=observed, col = 'red')
+```
+
