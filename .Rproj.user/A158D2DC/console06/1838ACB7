@@ -1,82 +1,0 @@
-
-The default interactive shell is now zsh.
-To update your account to use zsh, please run `chsh -s /bin/zsh`.
-For more details, please visit https://support.apple.com/kb/HT208050.
-]0;~/Desktop/demetri[?1034h(base) [36mdemetri[m@[32mDemetris-MBP:[33;1m~/Desktop/demetri[m$ //Users/demetri/miniconda3/bin/pythonn "/Users/demetri/Desktop/test.py"[A(base) [36mdemetri[m@[32mDemetris-MBP:[33;1m~/Desktop/demetri[m$ [K
-[K[A[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[CR --quiet --vanilla < scripts/knit_r eport.R
-> rmarkdown::render('scripts/03_report.Rmd', output_file = '../AB_results.pdf',clean = T)
-
-
-
-processing file: 03_report.Rmd
-  |                                                                              |                                                                      |   0%  |                                                                              |...                                                                   |   4%
-  ordinary text without R code
-
-  |                                                                              |......                                                                |   9%
-label: setup (with options) 
-List of 1
- $ include: logi FALSE
-
-  |                                                                              |.........                                                             |  13%
-  ordinary text without R code
-
-  |                                                                              |............                                                          |  17%
-label: methods
-  |                                                                              |...............                                                       |  22%
-  ordinary text without R code
-
-  |                                                                              |..................                                                    |  26%
-label: unnamed-chunk-1
-`summarise()` ungrouping output (override with `.groups` argument)
-  |                                                                              |.....................                                                 |  30%
-   inline R code fragments
-
-  |                                                                              |........................                                              |  35%
-label: unnamed-chunk-2
-  |                                                                              |...........................                                           |  39%
-  ordinary text without R code
-
-  |                                                                              |..............................                                        |  43%
-label: unnamed-chunk-3
-  |                                                                              |.................................                                     |  48%
-  ordinary text without R code
-
-  |                                                                              |.....................................                                 |  52%
-label: unnamed-chunk-4
-  |                                                                              |........................................                              |  57%
-   inline R code fragments
-
-  |                                                                              |...........................................                           |  61%
-label: unnamed-chunk-5
-  |                                                                              |..............................................                        |  65%
-  ordinary text without R code
-
-  |                                                                              |.................................................                     |  70%
-label: unnamed-chunk-6
-  |                                                                              |....................................................                  |  74%
-   inline R code fragments
-
-  |                                                                              |.......................................................               |  78%
-label: unnamed-chunk-7
-  |                                                                              |..........................................................            |  83%
-  ordinary text without R code
-
-  |                                                                              |.............................................................         |  87%
-label: unnamed-chunk-8
-  |                                                                              |................................................................      |  91%
-   inline R code fragments
-
-  |                                                                              |...................................................................   |  96%
-label: unnamed-chunk-9
-  |                                                                              |......................................................................| 100%
-  ordinary text without R code
-
-
-output file: 03_report.knit.md
-
-/Users/demetri/miniconda3/bin/pandoc +RTS -K512m -RTS 03_report.utf8.md --to latex --from markdown+autolink_bare_uris+tex_math_single_backslash --output ../AB_results.tex --self-contained --highlight-style tango --pdf-engine xelatex --variable graphics --lua-filter /Library/Frameworks/R.framework/Versions/4.0/Resources/library/rmarkdown/rmd/lua/pagebreak.lua --lua-filter /Library/Frameworks/R.framework/Versions/4.0/Resources/library/rmarkdown/rmd/lua/latex-div.lua --variable 'geometry:margin=1in' --include-in-header /var/folders/bp/7wzcfkhj67l2f8d9mlr4zytc0000gn/T//Rtmp2uYXne/rmarkdown-stra95662ee628b.html 
-
-Output created: ../AB_results.pdf
-> 
-]0;~/Desktop/demetri(base) [36mdemetri[m@[32mDemetris-MBP:[33;1m~/Desktop/demetri[m$ 
-]0;~/Desktop/demetri(base) [36mdemetri[m@[32mDemetris-MBP:[33;1m~/Desktop/demetri[m$ [K(base) [36mdemetri[m@[32mDemetris-MBP:[33;1m~/Desktop/demetri[m$ 
